@@ -38,6 +38,8 @@ const SCORE_HEIGHT = CANVAS_HEIGHT;
 const HEART_WIDTH = 60;
 const HEART_HEIGHT = 60;
 
+const OBSTACLE_SPAWN_X = CANVAS_WIDTH + RAIL_WIDTH / 2;
+
 const HEART_POSITION_Y = 80;
 const HEART_POSITION_X_1 = CANVAS_WIDTH - 350;
 const HEART_POSITION_X_2 = CANVAS_WIDTH - 260;
@@ -47,8 +49,11 @@ const GRID_POSITION_Y = 345;
 const RAIL_POSITION_Y = 535;
 const BOX_POSITION_Y = 545;
 
-const SCORE_POSITION_X = CANVAS_WIDTH - 200;
-const SCORE_POSITION_Y = 50;
+const SCORE_POSITION_X = CANVAS_WIDTH - 300;
+const SCORE_POSITION_Y = CANVAS_HEIGHT - 80;
+
+const RESULT_POSITION_X = 600;
+const RESULT_POSITION_Y = 650;
 
 // TEXTURES SECTION
 const backgroundTexture = new Image();
@@ -119,7 +124,6 @@ const KeyState = {
 // WORLD SECTION
 
 class World {
-
     constructor() {
         this.MAX_ENTITIES = 20;
         this.MAX_COMPONENTS = 12;
@@ -150,11 +154,11 @@ class World {
         this.renderSystems.push(system);
     }
     
-    updateSystems(gameFrame, delta) {
+    updateSystems() {
         this.systems.forEach(foo => foo(this));
     }
     
-    updateRenderSystems(gameFrame, delta) {
+    updateRenderSystems() {
         this.renderSystems.forEach(foo => foo(this));
     }
 
@@ -301,6 +305,13 @@ class Score {
     }
 }
 
+class ScoreBind {    
+    constructor(playerId) {
+        this.id = CmpId.SCORE_BIND;
+        this.playerId = playerId;
+    }
+};
+
 // SYSTEM SECTION
 
 function drawSystem(world) {
@@ -325,6 +336,39 @@ function drawSystem(world) {
             ctx.rotate(-degreesToRadians(vis.rotation));
             ctx.translate(-(pos.x + vis.width / 2), -(pos.y + vis.height / 2));
         }
+    }
+}
+
+function drawScoreSystem(world) {
+    for (let entity = 0; entity < world.MAX_ENTITIES; entity++) {    
+        if (!world.isEntityOk(entity, CmpId.SCORE_BIND, CmpId.POSITION)) {
+            continue;
+        }
+        
+        let scrBind = world.getComponent(entity, CmpId.SCORE_BIND);
+        let pos = world.getComponent(entity, CmpId.POSITION);
+
+        if (world.isEntityOk(scrBind.playerId, CmpId.SCORE)) {
+            let score = world.getComponent(scrBind.playerId, CmpId.SCORE);
+            ctx.font = "40px Arial";
+            ctx.fillStyle = "black";
+            ctx.fillText("Score: " + score.score, SCORE_POSITION_X, SCORE_POSITION_Y);    
+        }
+    }
+}
+
+function drawResultSystem(world) {
+    for (let entity = 0; entity < world.MAX_ENTITIES; entity++) {    
+        if (!world.isEntityOk(entity, CmpId.SCORE, CmpId.POSITION)) {
+            continue;
+        }
+        
+        let score = world.getComponent(entity, CmpId.SCORE);
+        let pos = world.getComponent(entity, CmpId.POSITION);
+
+        ctx.font = "50px Arial";
+        ctx.fillStyle = "white";
+        ctx.fillText("Your score: " + score.score, RESULT_POSITION_X, RESULT_POSITION_Y);    
     }
 }
 
@@ -377,10 +421,10 @@ function playerControlledSystem(world) {
         let jump = world.getComponent(entity, CmpId.JUMP);
         let pc = world.getComponent(entity, CmpId.PLAYER_CONTROLLED);
 
-        if (input.keys[Keys.RIGHT] != KeyState.RELEASED) {
+        if (input.keys[Keys.RIGHT] != KeyState.RELEASED && !isPlayerJumping(pc.playerState)) {
             pos.x = pos.x + 5;
             if (pos.x > BOBER_MAX_X) pos.x = BOBER_MAX_X;
-        } else if (input.keys[Keys.LEFT] != KeyState.RELEASED) {
+        } else if (input.keys[Keys.LEFT] != KeyState.RELEASED && !isPlayerJumping(pc.playerState)) {
             pos.x = pos.x - 5;
             if (pos.x < BOBER_MIN_X) pos.x = BOBER_MIN_X;
         }
@@ -541,7 +585,7 @@ class ObstacleGeneratorSettings {
         this.obstacleMin = minIndex;
         this.obstacleMax = minIndex + maxObstacles - 1;
         this.current = 0;
-        this.spawnRate = 300;
+        this.spawnRate = 350;
         this.gridMin = gridMinIndex;
         this.gridMax = gridMinIndex + maxObstacles - 1;
         this.scoreMin = scoreMinIndex;
@@ -572,45 +616,45 @@ function obstacleGeneratorSystem(world) {
 
         let x = Math.floor(Math.random() * 1000);
 
-        if (x < 1333) {
+        if (x < 333) {
             createBox(world, ogs);
-            createScorePoint(world, CANVAS_WIDTH + 300, ogs);
+            createScorePoint(world, OBSTACLE_SPAWN_X - BOX_WIDTH / 2 + 300, ogs);
         }
         else if (x < 666) {
             createGridFlag(world, ogs);
             createGridStick(world, ogs);
-            createScorePoint(world, CANVAS_WIDTH + 500, ogs);
+            createScorePoint(world, OBSTACLE_SPAWN_X - GRID_WIDTH / 2 + 500, ogs);
         }
         else {
             createRail(world, ogs);
-            createScorePoint(world, CANVAS_WIDTH + 550, ogs);
+            createScorePoint(world, OBSTACLE_SPAWN_X - RAIL_WIDTH / 2 + 550, ogs);
         }
     }
 }
 
 function createGridFlag(world, ogs) {
-    world.addComponentToEntity(ogs.gridMin + ogs.current, new Position(CANVAS_WIDTH, GRID_POSITION_Y));
+    world.addComponentToEntity(ogs.gridMin + ogs.current, new Position(OBSTACLE_SPAWN_X - GRID_WIDTH / 2, GRID_POSITION_Y));
     world.addComponentToEntity(ogs.gridMin + ogs.current, new Visual(gridTexture, GRID_WIDTH, GRID_HEIGHT));
     world.addComponentToEntity(ogs.gridMin + ogs.current, new Move(ogs.initialSpeed));
     world.addComponentToEntity(ogs.gridMin + ogs.current, new Collision(GRID_WIDTH, GRID_HEIGHT, ObstacleType.GRID));
 }
 
 function createGridStick(world, ogs) {
-    world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Position(CANVAS_WIDTH, GRID_POSITION_Y));
+    world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Position(OBSTACLE_SPAWN_X - GRID_WIDTH / 2, GRID_POSITION_Y));
     world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Visual(gridStickTexture, GRID_WIDTH, GRID_HEIGHT));
     world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Move(ogs.initialSpeed));
     world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Collision(GRID_WIDTH, GRID_HEIGHT, ObstacleType.GRID_STICK));
 }
 
 function createRail(world, ogs) {
-    world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Position(CANVAS_WIDTH, RAIL_POSITION_Y));
+    world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Position(OBSTACLE_SPAWN_X - RAIL_WIDTH / 2, RAIL_POSITION_Y));
     world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Visual(railTexture, RAIL_WIDTH, RAIL_HEIGHT));
     world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Move(ogs.initialSpeed));
     world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Collision(RAIL_WIDTH - 100, RAIL_HEIGHT, ObstacleType.RAIL));
 }
 
 function createBox(world, ogs) {
-    world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Position(CANVAS_WIDTH, BOX_POSITION_Y));
+    world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Position(OBSTACLE_SPAWN_X - BOX_WIDTH / 2, BOX_POSITION_Y));
     world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Visual(boxTexture, BOX_WIDTH, BOX_HEIGHT));
     world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Move(ogs.initialSpeed));
     world.addComponentToEntity(ogs.obstacleMin + ogs.current, new Collision(BOX_WIDTH, BOX_HEIGHT, ObstacleType.BOX));
@@ -666,7 +710,6 @@ function intersects(posA, colA, visA, posB, colB, visB) {
     }
     return CollisionType.NONE;
 }
-
 
 var initialImmortalDurationVal = 150;
 var immortalDuration = 150;
@@ -969,7 +1012,6 @@ function spike(x) {
 
 const degreesToRadians = deg => (deg * Math.PI) / 180.0;
 
-
 // GAME
 function createGameWorld() {
     gameplayECS.resetWorld();
@@ -988,6 +1030,7 @@ function createGameWorld() {
     gameplayECS.addSystem(backgroundSystem);
     
     gameplayECS.addRenderSystem(drawSystem);
+    gameplayECS.addRenderSystem(drawScoreSystem);
 
     const background1 = 0;
     gameplayECS.addComponentToEntity(background1, new Visual(backgroundTexture, CANVAS_WIDTH, CANVAS_HEIGHT, true));
@@ -1022,6 +1065,10 @@ function createGameWorld() {
     gameplayECS.addComponentToEntity(player, new Collision(BOBER_DEFAULT_WIDTH, BOBER_DEFAULT_HEIGHT, ObstacleType.PLAYER));
     gameplayECS.addComponentToEntity(player, new Lives(lives));
     gameplayECS.addComponentToEntity(player, new Score(0));
+
+    const scoreLabel = 2;
+    gameplayECS.addComponentToEntity(scoreLabel, new Position(SCORE_POSITION_X, SCORE_POSITION_Y));
+    gameplayECS.addComponentToEntity(scoreLabel, new ScoreBind(player));
 }
 
 function createStartWorld() {
@@ -1040,6 +1087,7 @@ function createGameOverWorld() {
     gameFrame = 0;
 
     gameOverECS.addRenderSystem(drawSystem);
+    gameOverECS.addRenderSystem(drawResultSystem);
 
     const background = 0;
     gameOverECS.addComponentToEntity(background, new Visual(gameOverTexture, CANVAS_WIDTH, CANVAS_HEIGHT, true));
@@ -1048,6 +1096,7 @@ function createGameOverWorld() {
     const result = 1; 
     gameOverECS.addComponentToEntity(result, new Score(playerResult));
     gameOverECS.addComponentToEntity(result, new Position(300, 500));
+
 }
 
 function createHighScoreWorld() {
@@ -1062,17 +1111,16 @@ function createHighScoreWorld() {
 }
 
 function gameLoop(timestamp) {
-    now = Date.now();
 
     gameState = updateState(gameState);
 
-    // var current_time = Date.now();
-    // if (current_time > now + timestep && gameState != GameState.PAUSE) {
+    // console.log(timestamp);
+
+    if (timestamp > laststamp + timestep && gameState != GameState.PAUSE) {
         gameFrame++;
         updateWorld(gameState);
-        // inputManager.update();
-        // now = current_time;
-    // }
+        laststamp = timestamp;
+    }
 
     renderWorld(gameState);
 
@@ -1146,24 +1194,24 @@ function updateState(state) {
 
 function updateWorld(gameState) {
     if (gameState == GameState.MAIN_MENU) {
-        mainMenuECS.updateSystems(gameFrame, deltaTime);
+        mainMenuECS.updateSystems();
     }
     else if (gameState == GameState.GAMEPLAY) {
-        gameplayECS.updateSystems(gameFrame, deltaTime);
+        gameplayECS.updateSystems();
     }
     else if (gameState == GameState.GAME_OVER) {
-        gameOverECS.updateSystems(gameFrame, deltaTime);
+        gameOverECS.updateSystems();
     }
 }
 
 function renderWorld(gameState) {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     switch (gameState) {
-        case GameState.HIGH_SCORES: highScoresECS.updateRenderSystems(gameFrame, deltaTime); break;
-        case GameState.MAIN_MENU: mainMenuECS.updateRenderSystems(gameFrame, deltaTime); break;
-        case GameState.GAMEPLAY: gameplayECS.updateRenderSystems(gameFrame, deltaTime); break;
-        case GameState.GAME_OVER: gameOverECS.updateRenderSystems(gameFrame, deltaTime); break;
-        case GameState.PAUSE: gameplayECS.updateRenderSystems(gameFrame, deltaTime); break;
+        case GameState.HIGH_SCORES: highScoresECS.updateRenderSystems(); break;
+        case GameState.MAIN_MENU: mainMenuECS.updateRenderSystems(); break;
+        case GameState.GAMEPLAY: gameplayECS.updateRenderSystems(); break;
+        case GameState.GAME_OVER: gameOverECS.updateRenderSystems(); break;
+        case GameState.PAUSE: gameplayECS.updateRenderSystems(); break;
     }
 }
 
@@ -1185,7 +1233,7 @@ var deltaTime = 0;
 var gameOver = false;
 var isNameGiven = false;
 var gameState = GameState.MAIN_MENU;
-var now = 0;
+var laststamp = 0;
 
 createStartWorld();
 gameLoop(0);
